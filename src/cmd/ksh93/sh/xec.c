@@ -1117,7 +1117,7 @@ int sh_exec(register const Shnode_t *t, int flags)
 #if SHOPT_PFSH
 				if(sh_isoption(SH_PFSH) && nv_isattr(np,NV_BLTINOPT) && !nv_isattr(np,NV_BLTPFSH)) 
 				{
-					if(path_xattr(shp,np->nvname,(char*)0))
+					if(path_xattr(shp,np->nvname,(char*)0) == 1)
 					{
 						dtdelete(shp->bltin_tree,np);
 						np = 0;

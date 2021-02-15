@@ -80,26 +80,27 @@ static int onstdpath(const char *name)
 int path_xattr(Shell_t *shp, const char *path, char *rpath)
 {
 	char  resolvedpath[PATH_MAX + 1];
+	execattr_t *pf;
+	int ret = 0;
+
+	if(!rpath)
+		rpath = resolvedpath;
+	if (!realpath(path, rpath))
+		return -1;
+
 	if (shp->gd->user && *shp->gd->user)
 	{
-		execattr_t *pf;
-		if(!rpath)
-			rpath = resolvedpath;
-		if (!realpath(path, resolvedpath))
-			return -1;
-		if(pf=getexecuser(shp->gd->user, KV_COMMAND, resolvedpath, GET_ONE))
+		if(pf=getexecuser(shp->gd->user, KV_COMMAND, rpath, GET_ONE))
 		{
-			if (!pf->attr || pf->attr->length == 0)
-			{
-				free_execattr(pf);
-				return(0);
+			if (pf->attr && pf->attr->length > 0) {
+				/* Present, and has attributes */
+				ret = 1;
 			}
 			free_execattr(pf);
-			return(1);
 		}
 	}
-	errno = ENOENT;
-	return(-1);
+
+	return (ret);
 }
 #endif /* SHOPT_PFSH */
 
@@ -110,7 +111,7 @@ static pid_t path_pfexecve(Shell_t *shp,const char *path, char *argv[],char *con
 	pid_t	pid;
 	if(spawn)
 	{
-		while((pid = vfork()) < 0)
+		while((pid = fork()) < 0)
 			_sh_fork(shp,pid, 0, (int*)0);
 		if(pid)
 			return(pid);
@@ -122,8 +123,18 @@ static pid_t path_pfexecve(Shell_t *shp,const char *path, char *argv[],char *con
 
 	/* we can exec the command directly instead of via pfexec(1) if */
 	/* there is a matching entry without attributes in exec_attr(4) */
-	if(!path_xattr(shp,path,resolvedpath))
+	/* or if there is no matching entry in exec_attr(4) */
+	switch (path_xattr(shp,path,resolvedpath)) {
+	case 0:
+		/* Not present, or present without attributes */
 		return(execve(path, argv, envp));
+	case -1:
+		/* Error resolving path */
+		return (-1);
+	default:
+		/* Present, and has attributes - use pfexec(1) */
+		break;
+	}
 	--argv;
 	argv[0] = argv[1];
 	argv[1] = resolvedpath;
